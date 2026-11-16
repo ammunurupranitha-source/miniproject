@@ -1,6 +1,7 @@
+
 import streamlit as st
 import sqlite3
-
+import time
 from datetime import date
 
 # Page configuration
@@ -46,7 +47,32 @@ CREATE TABLE IF NOT EXISTS tasks (
 )
 """)
 
+# NEW: Exam database table
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS exams (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_name TEXT,
+    exam_date TEXT
+)
+""")
+
 conn.commit()
+
+# Timer session state
+if "timer_running" not in st.session_state:
+    st.session_state.timer_running = False
+
+if "timer_end" not in st.session_state:
+    st.session_state.timer_end = 0.0
+
+if "timer_remaining" not in st.session_state:
+    st.session_state.timer_remaining = 1500
+
+if "timer_mode" not in st.session_state:
+    st.session_state.timer_mode = "Study"
+
+if "timer_sessions" not in st.session_state:
+    st.session_state.timer_sessions = 0
 
 # Main heading
 st.title("📚 Student Study Planner")
@@ -57,7 +83,15 @@ st.sidebar.title("📌 Menu")
 
 menu = st.sidebar.selectbox(
     "Choose an option",
-    ["Dashboard", "Subjects", "Timetable", "Tasks"]
+    [
+        "Dashboard",
+        "Subjects",
+        "Timetable",
+        "Tasks",
+        "Study Progress Tracker",
+        "Pomodoro Timer",
+        "Exam Countdown"
+    ]
 )
 
 # DASHBOARD
@@ -347,4 +381,275 @@ elif menu == "Tasks":
     else:
         st.info("Please add subjects before creating tasks.")
 
+# NEW FEATURE 1: STUDY PROGRESS TRACKER
+elif menu == "Study Progress Tracker":
+
+    st.header("📊 Study Progress Tracker")
+    st.write("Track your study tasks and monitor your progress.")
+
+    cursor.execute("SELECT COUNT(*) FROM tasks")
+    total = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM tasks WHERE completed = 1"
+    )
+    completed = cursor.fetchone()[0]
+
+    pending = total - completed
+
+    percentage = (
+        (completed / total) * 100 if total > 0 else 0
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Total Tasks", total)
+    col2.metric("Completed Tasks", completed)
+    col3.metric("Pending Tasks", pending)
+
+    st.divider()
+
+    st.subheader("🎯 Overall Progress")
+
+    st.progress(int(percentage))
+    st.success(f"Your study completion is {percentage:.1f}%")
+
+    st.subheader("📈 Task Performance")
+
+    st.bar_chart({
+        "Number of Tasks": {
+            "Completed": completed,
+            "Pending": pending
+        }
+    })
+
+    st.divider()
+
+    st.subheader("📚 Subject-wise Progress")
+
+    cursor.execute("""
+        SELECT subject_name,
+               COUNT(*),
+               SUM(completed)
+        FROM tasks
+        GROUP BY subject_name
+    """)
+
+    subject_progress = cursor.fetchall()
+
+    if subject_progress:
+
+        for subject, total_tasks, done in subject_progress:
+
+            done = done or 0
+            percent = done / total_tasks
+
+            st.write(f"**{subject}**")
+            st.progress(percent)
+            st.caption(
+                f"{done} out of {total_tasks} tasks completed"
+            )
+
+    else:
+        st.info("Add some study tasks to see your progress.")
+
+# NEW FEATURE 2: POMODORO TIMER
+elif menu == "Pomodoro Timer":
+
+    st.header("⏱️ Pomodoro Study Timer")
+    st.write("Stay focused with study sessions and short breaks.")
+
+    mode = st.radio(
+        "Choose Timer",
+        ["Study (25 Minutes)", "Short Break (5 Minutes)"],
+        horizontal=True
+    )
+
+    selected_mode = (
+        "Study" if mode.startswith("Study") else "Break"
+    )
+
+    duration = 1500 if selected_mode == "Study" else 300
+
+    # Reset when timer type changes
+    if st.session_state.timer_mode != selected_mode:
+        st.session_state.timer_running = False
+        st.session_state.timer_remaining = duration
+        st.session_state.timer_mode = selected_mode
+
+    @st.fragment(run_every="1s")
+    def timer_display():
+
+        if st.session_state.timer_running:
+
+            remaining = max(
+                0,
+                int(st.session_state.timer_end - time.time())
+            )
+
+            st.session_state.timer_remaining = remaining
+
+            if remaining == 0:
+
+                st.session_state.timer_running = False
+
+                if st.session_state.timer_mode == "Study":
+                    st.session_state.timer_sessions += 1
+
+                st.success("🎉 Timer completed!")
+
+        else:
+            remaining = st.session_state.timer_remaining
+
+        minutes = remaining // 60
+        seconds = remaining % 60
+
+        st.subheader(f"📖 {st.session_state.timer_mode} Session")
+
+        st.markdown(
+            f"<h1 style='text-align:center;font-size:65px;'>"
+            f"{minutes:02d}:{seconds:02d}</h1>",
+            unsafe_allow_html=True
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            if st.button(
+                "▶️ Start",
+                disabled=st.session_state.timer_running
+            ):
+                st.session_state.timer_end = time.time() + remaining
+                st.session_state.timer_running = True
+                st.rerun(scope="fragment")
+
+        with col2:
+            if st.button(
+                "⏸️ Pause",
+                disabled=not st.session_state.timer_running
+            ):
+                st.session_state.timer_remaining = max(
+                    0,
+                    int(st.session_state.timer_end - time.time())
+                )
+                st.session_state.timer_running = False
+                st.rerun(scope="fragment")
+
+        with col3:
+            if st.button("🔄 Reset"):
+                st.session_state.timer_running = False
+                st.session_state.timer_remaining = duration
+                st.rerun(scope="fragment")
+
+        st.divider()
+
+        st.metric(
+            "Completed Study Sessions",
+            st.session_state.timer_sessions
+        )
+
+    timer_display()
+
+# NEW FEATURE 3: EXAM COUNTDOWN
+elif menu == "Exam Countdown":
+
+    st.header("📅 Exam Countdown")
+    st.write("Plan your examinations and keep track of remaining days.")
+
+    cursor.execute(
+        "SELECT subject_name FROM subjects ORDER BY subject_name"
+    )
+
+    subject_list = [
+        row[0] for row in cursor.fetchall()
+    ]
+
+    if subject_list:
+
+        with st.form("exam_form"):
+
+            st.subheader("➕ Add Upcoming Exam")
+
+            exam_subject = st.selectbox(
+                "Select Exam Subject",
+                subject_list
+            )
+
+            exam_date = st.date_input(
+                "Select Exam Date",
+                min_value=date.today()
+            )
+
+            submit_exam = st.form_submit_button(
+                "Add Exam"
+            )
+
+            if submit_exam:
+
+                cursor.execute("""
+                    INSERT INTO exams (subject_name, exam_date)
+                    VALUES (?, ?)
+                """, (
+                    exam_subject,
+                    str(exam_date)
+                ))
+
+                conn.commit()
+
+                st.success("Exam added successfully!")
+                st.rerun()
+
+    else:
+        st.info("Please add subjects before adding exams.")
+
+    st.divider()
+
+    st.subheader("📝 Upcoming Examinations")
+
+    cursor.execute("""
+        SELECT id, subject_name, exam_date
+        FROM exams
+        ORDER BY exam_date
+    """)
+
+    exams = cursor.fetchall()
+
+    if exams:
+
+        for exam_id, subject, exam_day in exams:
+
+            exam_day = date.fromisoformat(exam_day)
+            remaining_days = (exam_day - date.today()).days
+
+            with st.container(border=True):
+
+                col1, col2 = st.columns([3, 1])
+
+                col1.write(f"📘 **{subject}**")
+                col1.write(f"📅 Exam Date: {exam_day}")
+
+                if remaining_days > 0:
+                    col2.metric("Days Left", remaining_days)
+                elif remaining_days == 0:
+                    col2.warning("Exam is today!")
+                else:
+                    col2.info("Exam date has passed.")
+
+                if st.button(
+                    "Delete Exam",
+                    key=f"exam_{exam_id}"
+                ):
+
+                    cursor.execute(
+                        "DELETE FROM exams WHERE id = ?",
+                        (exam_id,)
+                    )
+
+                    conn.commit()
+                    st.rerun()
+
+    else:
+        st.info("No examinations added yet.")
+
+# Close database connection
 conn.close()
