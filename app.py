@@ -4,7 +4,7 @@ import streamlit as st
 import sqlite3
 import time
 from datetime import date
-
+from notification_sender import send_notification, load_device_token
 # =====================================
 # PAGE CONFIGURATION
 # =====================================
@@ -56,7 +56,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     completed INTEGER DEFAULT 0
 )
 """)
+# Add reminder_time column if it does not exist
+cursor.execute("PRAGMA table_info(tasks)")
+task_columns = [column[1] for column in cursor.fetchall()]
 
+if "reminder_time" not in task_columns:
+    cursor.execute(
+        "ALTER TABLE tasks ADD COLUMN reminder_time TEXT"
+    )
 # Exams table
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS exams (
@@ -447,6 +454,9 @@ elif menu == "Tasks":
                 value=today
             )
 
+            reminder_time = st.time_input(
+    "⏰ Reminder Time"
+)
             submit = st.form_submit_button("Add Task")
 
             if submit:
@@ -454,14 +464,15 @@ elif menu == "Tasks":
                 if task_name.strip():
 
                     cursor.execute("""
-                    INSERT INTO tasks
-                    (task_name, subject_name, due_date)
-                    VALUES (?, ?, ?)
-                    """, (
-                        task_name.strip(),
-                        subject,
-                        str(due_date)
-                    ))
+    INSERT INTO tasks
+    (task_name, subject_name, due_date, reminder_time)
+    VALUES (?, ?, ?, ?)
+    """, (
+        task_name.strip(),
+        subject,
+        str(due_date),
+        str(reminder_time)
+    ))
 
                     conn.commit()
 
@@ -477,7 +488,7 @@ elif menu == "Tasks":
 
         cursor.execute("""
         SELECT id, task_name, subject_name,
-               due_date, completed
+               due_date, completed, reminder_time
         FROM tasks
         ORDER BY due_date
         """)
@@ -488,10 +499,10 @@ elif menu == "Tasks":
 
             for task in tasks:
 
-                task_id, name, subject, due, completed = task
+                task_id, name, subject, due, completed, reminder_time = task
 
                 checked = st.checkbox(
-                    f"{name} - {subject} - Due: {due}",
+                    f"{name} - {subject} - Due: {due} - Reminder: {reminder_time}",
                     value=bool(completed),
                     key=f"task_{task_id}"
                 )
@@ -839,3 +850,20 @@ elif menu == "Exam Countdown":
 # =====================================
 
 conn.close()
+st.divider()
+st.subheader("🔔 Test Firebase Notification")
+
+if st.button("Send Test Notification"):
+    device_token = load_device_token()
+
+    if device_token:
+        result = send_notification(
+            device_token,
+            "Study Planner",
+            "Your Firebase notifications are working!"
+        )
+
+        if result:
+            st.success("Test notification sent successfully!")
+    else:
+        st.error("Device token not found. Please check device_token.txt.")
