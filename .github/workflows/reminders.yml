@@ -1,4 +1,3 @@
-
 name: Study Planner Reminders
 
 on:
@@ -15,13 +14,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: pip install firebase-admin
 
       - name: Run reminder script
         env:
-          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           FCM_DEVICE_TOKEN: ${{ secrets.FCM_DEVICE_TOKEN }}
         run: python reminder_job.py
