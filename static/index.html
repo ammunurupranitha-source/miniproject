@@ -1,0 +1,162 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Study Planner Notifications</title>
+
+    <script src="https://www.gstatic.com/firebasejs/13.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/13.0.0/firebase-messaging-compat.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+
+        button {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #status {
+            margin-top: 15px;
+            color: green;
+        }
+
+        #token {
+            width: 90%;
+            margin-top: 15px;
+            padding: 8px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>📚 Study Planner Notifications</h2>
+
+    <p>Enable notifications to receive study reminders.</p>
+
+    <button onclick="enableNotifications()">
+        Enable Notifications
+    </button>
+
+    <p id="status">Notifications are not enabled yet.</p>
+
+    <textarea id="token" rows="5"
+        placeholder="Your notification token will appear here"
+        readonly></textarea>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBKkOfRwyp3tBg3LSSbraGT2cCx_iZ3vsg",
+            authDomain: "student-study-planner-b64b5.firebaseapp.com",
+            projectId: "student-study-planner-b64b5",
+            storageBucket: "student-study-planner-b64b5.firebasestorage.app",
+            messagingSenderId: "1010040759555",
+            appId: "1:1010040759555:web:bf91db48451019975e7536"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+
+        const messaging = firebase.messaging();
+
+        // Enable notifications
+        async function enableNotifications() {
+            const status = document.getElementById("status");
+
+            try {
+                if (!("serviceWorker" in navigator)) {
+                    throw new Error("Service workers are not supported.");
+                }
+
+                if (!("Notification" in window)) {
+                    throw new Error("Notifications are not supported.");
+                }
+
+                // Ask permission immediately after button click
+const permission = await Notification.requestPermission();
+
+if (permission !== "granted") {
+    status.innerText = "Notification permission was not granted.";
+    return;
+}
+
+// Register Firebase service worker
+const registration = await navigator.serviceWorker.register(
+    "/app/static/firebase-messaging-sw.js",
+    { scope: "/app/static/" }
+);
+
+// Wait for service worker to become active
+await navigator.serviceWorker.ready;
+
+const activeRegistration =
+    await navigator.serviceWorker.getRegistration("/app/static/");
+
+if (!activeRegistration || !activeRegistration.active) {
+    throw new Error("Firebase service worker is not active yet.");
+}
+
+// Get notification token
+const token = await messaging.getToken({
+    serviceWorkerRegistration: activeRegistration
+});
+
+                if (token) {
+                    document.getElementById("token").value = token;
+
+                    localStorage.setItem(
+                        "studyPlannerFCMToken",
+                        token
+                    );
+
+                    status.innerText =
+                        "Notifications enabled successfully!";
+                } else {
+                    status.innerText =
+                        "Could not generate notification token.";
+                }
+
+            } catch (error) {
+    console.error("Firebase notification error:", error);
+    console.error("Error code:", error.code);
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+
+    status.innerText =
+        "Error: " + error.name + " - " + error.message;
+}
+        }
+
+        // Handle notifications while the page is open
+        messaging.onMessage((payload) => {
+            const title =
+                payload.notification?.title ||
+                payload.data?.title ||
+                "Study Planner";
+
+            const body =
+                payload.notification?.body ||
+                payload.data?.body ||
+                "You have a study reminder!";
+
+            if (Notification.permission === "granted") {
+                new Notification(title, { body: body });
+            }
+        });
+    </script>
+
+</body>
+</html>
