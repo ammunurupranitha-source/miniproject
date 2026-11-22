@@ -1,34 +1,27 @@
 
-import os
-import json
-import firebase_admin
-from firebase_admin import credentials, messaging
+from notification_sender import send_notification, load_device_token
 
 
-def send_reminder():
-    service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
-    device_token = os.environ.get("FCM_DEVICE_TOKEN")
+def main():
+    print("Starting Study Planner Reminder Job...")
 
-    if not service_account_json or not device_token:
-        raise ValueError("Firebase credentials or device token are missing.")
+    device_token = load_device_token()
 
-    service_account = json.loads(service_account_json)
+    if not device_token:
+        print("ERROR: Firebase device token is missing.")
+        return
 
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(service_account)
-        firebase_admin.initialize_app(cred)
-
-    message = messaging.Message(
-        notification=messaging.Notification(
-            title="Study Planner Reminder",
-            body="It's time to check your study tasks. Keep learning!"
-        ),
-        token=device_token
+    result = send_notification(
+        device_token=device_token,
+        title="📚 Study Planner Reminder",
+        body="It's time to study! Open your Student Study Planner."
     )
 
-    response = messaging.send(message)
-    print("Notification sent:", response)
+    if result:
+        print("Study reminder sent successfully!")
+    else:
+        print("Failed to send study reminder.")
 
 
 if __name__ == "__main__":
-    send_reminder()
+    main()
