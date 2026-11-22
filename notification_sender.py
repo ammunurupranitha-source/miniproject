@@ -11,16 +11,21 @@ def initialize_firebase():
     if not firebase_admin._apps:
         try:
             service_account_json = os.environ.get(
-                "FIREBASE_SERVICE_ACCOUNT_JSON"
+                "FIREBASE_SERVICE_ACCOUNT"
             )
 
-            if not service_account_json:
-                raise ValueError(
-                    "Firebase service account secret is missing."
+            if service_account_json:
+                firebase_config = json.loads(service_account_json)
+                cred = credentials.Certificate(firebase_config)
+
+            elif os.path.exists("firebase-service-account.json"):
+                cred = credentials.Certificate(
+                    "firebase-service-account.json"
                 )
 
-            firebase_config = json.loads(service_account_json)
-            cred = credentials.Certificate(firebase_config)
+            else:
+                print("Firebase service account is missing.")
+                return False
 
             firebase_admin.initialize_app(cred)
 
@@ -31,11 +36,28 @@ def initialize_firebase():
     return True
 
 
+def load_device_token():
+    """Read the saved Firebase device token."""
+
+    token = os.environ.get("FCM_DEVICE_TOKEN")
+
+    if token:
+        return token.strip()
+
+    try:
+        with open("device_token.txt", "r", encoding="utf-8") as file:
+            return file.read().strip()
+
+    except FileNotFoundError:
+        print("Firebase device token is missing.")
+        return None
+
+
 def send_notification(device_token, title, body):
     """Send a push notification to one registered device."""
 
     if not device_token:
-        print("Firebase device token is missing.")
+        print("Device token is missing.")
         return False
 
     if not initialize_firebase():
@@ -52,25 +74,8 @@ def send_notification(device_token, title, body):
 
         response = messaging.send(message)
         print("Notification sent successfully:", response)
-        return response
+        return True
 
     except Exception as e:
         print(f"Notification sending failed: {e}")
         return False
-
-
-def load_device_token():
-    """Read the saved Firebase device token."""
-
-    token = os.environ.get("FCM_DEVICE_TOKEN")
-
-    if token:
-        return token.strip()
-
-    try:
-        with open("device_token.txt", "r", encoding="utf-8") as file:
-            return file.read().strip()
-
-    except FileNotFoundError:
-        print("Device token file not found.")
-        return None
